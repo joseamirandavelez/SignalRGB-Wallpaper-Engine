@@ -1,0 +1,31 @@
+---
+description: Never name competing lighting apps in code or docs
+alwaysApply: true
+---
+
+# No competing lighting-app brand names
+
+Never write these names in source, comments, identifiers, tests, docs, changelogs, UI copy, commit messages, or chat:
+
+- SignalRGB
+- WhirlwindFX / Whirlwind FX
+- SRGB as a product name or abbreviation for that app
+
+Do not invent stand-ins that still identify them (S-RGB, Signal RGB, WWFX, and similar).
+
+Say what RGBJunkie does. If you must refer to another app, use a generic phrase: "another lighting app", "a third-party host", "legacy HTML effect metadata".
+
+## Allowed
+
+- **sRGB** the color space (IEC 61966-2-1), CSS `srgb`, and similar color math
+- Do not rename existing folders or remotes on disk as a drive-by
+
+## Examples
+
+```text
+Bad:  // SignalRGB uses group= as show-when
+Good: // Some imported HTML effects used group= as a show-when rule. RGBJunkie uses visible-when.
+
+Bad:  migrateSrgbLayout()
+Good: migrateImportedHtmlLayout()
+```
