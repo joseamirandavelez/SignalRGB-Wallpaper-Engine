@@ -1,11 +1,13 @@
 /**
- * RGBJunkie port of SignalRGB Wallpaper Engine 2
- * Upstream: https://github.com/qiangqiang101/SignalRGB-Wallpaper-Engine
+ * RGBJunkie live wallpaper companion plugin.
+ * Publisher: I'm Not MentaL
  * SPDX-License-Identifier: MIT
  *
- * Install: copy Network/Wallpaper/Wallpaper_Engine.js into
- * %APPDATA%\RGBJunkie\plugins\Network\Wallpaper\
- * Requires Wallpaper Engine or Lively Wallpaper companion + RGBJunkie 0.3.1+.
+ * Lights3D install: copy this file to %APPDATA%\RGBJunkie-L3D\plugins\
+ * This plugin is the helper sender (UDP 8133 main, 8134 second). Lights3D
+ * still samples virtual monitors on the desk. It does not send color or
+ * settings packets while this file is loaded. Color packets are 0x00
+ * (max 480 LEDs each). Settings packets are 0x01 plus a width,height trailer.
  */
 
 /* global
@@ -34,12 +36,11 @@ export const rgbjunkie = {
 	abiVersion: 1,
 	displayName: "Live Wallpaper",
 	publisher: "I'm Not MentaL",
-	match: { vendorId: 0, productIds: [0] },
+	match: { vendorId: 0, productIds: [] },
 	validateEndpoint: () => false,
 	transportType: "network",
 	deviceKind: "wallpaper",
-	imageUrl:
-		"https://raw.githubusercontent.com/qiangqiang101/SignalRGB-Wallpaper-Engine/refs/heads/main/srgbwallpaper.png",
+	imageUrl: "",
 	size: [32, 18],
 	defaultPosition: [50, 50],
 	defaultScale: 0.2,
@@ -57,7 +58,7 @@ export const rgbjunkie = {
 		{ id: "FPS", label: "Target FPS", description: "Wallpaper animation frame rate.", type: "number", min: "1", max: "240", step: "1", default: "60" },
 		{ id: "ShowFps", group: "settings", label: "Show FPS", description: "Overlay FPS on the wallpaper.", type: "boolean", default: "false" },
 		{ id: "BackgroundColor", group: "settings", label: "Background Color", description: "Wallpaper background color.", type: "color", default: "#000000", min: "0", max: "360" },
-		{ id: "CoverImage", label: "Cover Image", type: "string", browse: "image", description: "Diffuser image (local path or URL).", default: "https://raw.githubusercontent.com/qiangqiang101/OpenRGB-Wallpaper/master/Wallpaper-Wallpaper/razer5.png" },
+		{ id: "CoverImage", label: "Cover Image", type: "string", browse: "image", description: "Diffuser image (local path or URL).", default: "" },
 		{ id: "CoverImageStretch", group: "settings", label: "Cover Image Stretch", description: "How the cover image is scaled.", type: "combobox", values: ["None", "Fill", "Uniform", "Uniform to Fill"], default: "Uniform" },
 	],
 };
@@ -66,16 +67,14 @@ export function version() {
 	return "2.0.0";
 }
 
-//Fixed settings
-const MaxLedsInPacket = 480; //483;
+const MaxLedsInPacket = 480;
 const ColorPacket = 0x00;
 const SettingPacket = 0x01;
 
-//User settings
 const vMatrixSize = { "4:3 Landscape": 0, "4:3 Portrait": 1, "5:4 Landscape": 2, "5:4 Portrait": 3, "16:9 Landscape": 4, "16:9 Portrait": 5, "16:10 Landscape": 6, "16:10 Portrait": 7, "21:9 Landscape": 8, "21:9 Portrait": 9, "32:9 Landscape": 10, "32:9 Portrait": 11, "4:1 Landscape": 12, "4:1 Portrait": 13 };
 const vMatrixTier = { "Small": 0, "Normal": 1, "Large": 2, "X Large": 3 };
-const vShutdownEffect = { 
-	"Solid Color": 0, "Aurora": 1, "Breathing": 2, "Rainbow Wave (Left)": 3, "Rainbow Wave (Right)": 4, "Neon Wave (Left)": 5, "Neon Wave (Right)": 6, 
+const vShutdownEffect = {
+	"Solid Color": 0, "Aurora": 1, "Breathing": 2, "Rainbow Wave (Left)": 3, "Rainbow Wave (Right)": 4, "Neon Wave (Left)": 5, "Neon Wave (Right)": 6,
 	"Sunset Wave (Left)": 7, "Sunset Wave (Right)": 8, "Audio Party": 9, "Rainbow Cycle": 10, "Rainbow Pinwheel": 11, "Fire": 12
 };
 const vLedShape = { "Rectangle": 0, "Rounded Rectangle": 1, "Circle": 2, "Sphere": 2 };
@@ -111,7 +110,7 @@ const vLedSizes = {
 	"21:9 Portrait": { "Small": [18, 42], "Normal": [27, 63], "Large": [36, 84], "X Large": [72, 168] },
 	"32:9 Landscape": { "Small": [64, 18], "Normal": [96, 27], "Large": [128, 36], "X Large": [256, 72] },
 	"32:9 Portrait": { "Small": [18, 64], "Normal": [27, 96], "Large": [36, 128], "X Large": [72, 256] }
-}
+};
 const _vLedNames = {
 	"4:1": { "Small": generateLedNames(16), "Normal": generateLedNames(64), "Large": generateLedNames(256), "X Large": generateLedNames(1024) },
 	"4:3": { "Small": generateLedNames(48), "Normal": generateLedNames(192), "Large": generateLedNames(768), "X Large": generateLedNames(3072) },
@@ -144,7 +143,21 @@ let __rgbjWallpaperLastMatrixKey = "";
 const RGBJ_WALLPAPER_DEFAULT_MATRIX = "16:9 Landscape";
 const RGBJ_WALLPAPER_DEFAULT_TIER = "Normal";
 
-/** Resolve aspect ratio / tier with safe defaults so LED exports work before settings sync. */
+function wallpaperTarget() {
+	if (typeof controller !== "undefined" && controller && controller.ip) {
+		return controller;
+	}
+	return { name: "Live Wallpaper", ip: "127.0.0.1", port: 8133 };
+}
+
+function wallpaperSend(packet) {
+	if (typeof udp === "undefined" || !udp || typeof udp.send !== "function") {
+		return;
+	}
+	const target = wallpaperTarget();
+	udp.send(target.ip, target.port, packet);
+}
+
 function rgbjWallpaperLayoutKeys() {
 	const ms =
 		typeof MatrixSize !== "undefined" && MatrixSize != null && vLedNames[MatrixSize]
@@ -271,7 +284,7 @@ export function getSize() {
 }
 
 export function getDisplayName() {
-	return controller && controller.name ? String(controller.name) : "Live Wallpaper";
+	return wallpaperTarget().name || "Live Wallpaper";
 }
 
 export function deviceConfiguration() {
@@ -279,8 +292,10 @@ export function deviceConfiguration() {
 }
 
 export function initialize() {
-	device.setName(controller.name);
-	device.addFeature("udp");
+	device.setName(wallpaperTarget().name);
+	if (typeof device.addFeature === "function") {
+		device.addFeature("udp");
+	}
 	__rgbjWallpaperLastMatrixKey = "";
 	syncMatrixLayout();
 	const fps = Math.max(1, Math.min(240, Number(FPS) || 60));
@@ -325,31 +340,33 @@ function updateSettings() {
 		} catch (_e) { /* ignore */ }
 		return;
 	}
-	let bgcolor = hexToRgb(BackgroundColor);
-	let sdcolor = hexToRgb(shutdownColor);
-	let packet = [SettingPacket, matrixIdx, tierIdx, vShutdownEffect[ShutdownEffect], rgbjSettingBool(ShowFps) ? 1 : 0, BlurIntensity,
-		rgbjWallpaperLedShapeByte(), RoundedRectangleCornerRadius, LedPadding, FPS, rgbjWallpaperCoverStretchByte(), 0,
-		bgcolor[0], bgcolor[1], bgcolor[2], sdcolor[0], sdcolor[1], sdcolor[2]]; //0x01 = Send Settings
+	const bgcolor = hexToRgb(BackgroundColor);
+	const sdcolor = hexToRgb(shutdownColor);
+	const blur = Math.max(0, Math.min(100, Number(BlurIntensity) || 0)) | 0;
+	const corner = Math.max(0, Math.min(20, Number(RoundedRectangleCornerRadius) || 0)) | 0;
+	const padding = Math.max(0, Math.min(250, Number(LedPadding) || 0)) | 0;
+	const fps = Math.max(1, Math.min(240, Number(FPS) || 60)) | 0;
+	let packet = [SettingPacket, matrixIdx, tierIdx, vShutdownEffect[ShutdownEffect] | 0, rgbjSettingBool(ShowFps) ? 1 : 0, blur,
+		rgbjWallpaperLedShapeByte(), corner, padding, fps, rgbjWallpaperCoverStretchByte(), 0,
+		bgcolor[0], bgcolor[1], bgcolor[2], sdcolor[0], sdcolor[1], sdcolor[2]];
 
-	// Convert string to bytes and add to packet
-	const coverImageBytes = stringToBytes(CoverImage);
-	packet.push(coverImageBytes.length); // Length prefix
+	const coverImageBytes = stringToBytes(CoverImage).slice(0, 255);
+	packet.push(coverImageBytes.length);
 	packet.push(...coverImageBytes);
+	packet.push(gridSize[0] & 255, gridSize[1] & 255);
 
 	const settingsKey = packet.join(",");
 	if (settingsKey === __rgbjWallpaperLastSettingsKey) return;
 	__rgbjWallpaperLastSettingsKey = settingsKey;
 
-	udp.send(controller.ip, controller.port, packet);
+	wallpaperSend(packet);
 }
 
 export function render() {
 	if (typeof __rgbjSyncControllableParams === "function") {
 		__rgbjSyncControllableParams();
 	}
-	// Refresh grid when Aspect Ratio / Display Size changes (not every frame — avoids silent render failures).
 	syncMatrixLayoutIfNeeded();
-	// Companion may start after RGBJunkie; resend settings once when the engine begins streaming colors.
 	if (!__rgbjWallpaperSettingsResyncOnRender) {
 		__rgbjWallpaperSettingsResyncOnRender = true;
 		updateSettings();
@@ -357,7 +374,6 @@ export function render() {
 	grabColors();
 }
 
-/** Host calls this when the Wallpaper Engine companion opens UDP 8133 after a delayed connect. */
 export function resyncCompanionSettings() {
 	__rgbjWallpaperLastSettingsKey = "";
 	updateSettings();
@@ -404,14 +420,16 @@ function grabColors(shutdown = false) {
 		const startIdx = currPacket * MaxLedsInPacket;
 		let packet = [ColorPacket, currPacket, NumPackets];
 		packet = packet.concat(RGBData.splice(0, MaxLedsInPacket * 3));
-		udp.send(controller.ip, controller.port, packet);
+		wallpaperSend(packet);
+		void startIdx;
 	}
 }
 
 function stringToBytes(str) {
 	const bytes = [];
-	for (let i = 0; i < str.length; i++) {
-		const code = str.charCodeAt(i);
+	const s = String(str || "");
+	for (let i = 0; i < s.length; i++) {
+		const code = s.charCodeAt(i);
 		if (code < 0x80) {
 			bytes.push(code);
 		} else if (code < 0x800) {
@@ -447,7 +465,7 @@ function generateLedPositions(width, height) {
 	}
 
 	return positions;
-};
+}
 
 function generateLedNames(count) {
 	const names = [];
@@ -457,45 +475,35 @@ function generateLedNames(count) {
 	}
 
 	return names;
-};
+}
 
 export function DiscoveryService() {
-	this.IconUrl = "https://raw.githubusercontent.com/qiangqiang101/SignalRGB-Wallpaper-Engine/refs/heads/main/srgbwallpaper.png";
+	this.IconUrl = "";
 	this.Initialize = () => {
-		// service.addController(new Wallpaper({
-		// 	id: "Wallpaper3",
-		// 	port: 8132,
-		// 	ip: "127.0.0.1",
-		// 	name: "Wallpaper Engine 2 (debug)",
-		// }));
 		service.addController(new Wallpaper({
 			id: "Wallpaper",
 			port: 8133,
 			ip: "127.0.0.1",
 			name: "Live Wallpaper",
 		}));
-		// service.addController(new Wallpaper({
-		// 	id: "Wallpaper2",
-		// 	port: 8134,
-		// 	ip: "127.0.0.1",
-		// 	name: "Wallpaper Engine 2 (2nd Screen)",
-		// }));
-
-		// const controller = service.getController("Wallpaper");
-		// service.updateController(controller);
-		// service.announceController(controller);
+		service.addController(new Wallpaper({
+			id: "Wallpaper2",
+			port: 8134,
+			ip: "127.0.0.1",
+			name: "Live Wallpaper (second screen)",
+		}));
 
 		const controllers = [service.getController("Wallpaper"), service.getController("Wallpaper2")];
-		controllers.forEach(function (controller, index) {
-			service.updateController(controller);
-			service.announceController(controller);
+		controllers.forEach(function (entry) {
+			if (!entry) return;
+			service.updateController(entry);
+			service.announceController(entry);
 		});
 
 		updateSettings();
 	};
 
 	this.Update = () => {
-
 		for (const cont of service.controllers) {
 			cont.obj.update();
 		}
@@ -523,7 +531,7 @@ class Wallpaper {
 }
 
 export function imageUrl() {
-	return "https://raw.githubusercontent.com/qiangqiang101/SignalRGB-Wallpaper-Engine/refs/heads/main/srgbwallpaper.png";
+	return "";
 }
 
 export function LedNames() {
