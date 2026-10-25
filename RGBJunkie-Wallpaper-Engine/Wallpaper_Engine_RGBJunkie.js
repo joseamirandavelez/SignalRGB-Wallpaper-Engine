@@ -79,22 +79,35 @@ const vShutdownEffect = {
 };
 const vLedShape = { "Rectangle": 0, "Rounded Rectangle": 1, "Circle": 2, "Sphere": 2 };
 const vCoverImageStretch = { "None": 0, "Fill": 1, "Uniform": 2, "Uniform to Fill": 3 };
-const vLedPositions = {
-	"4:1 Landscape": { "Small": generateLedPositions(8, 2), "Normal": generateLedPositions(16, 4), "Large": generateLedPositions(32, 8), "X Large": generateLedPositions(64, 16) },
-	"4:1 Portrait": { "Small": generateLedPositions(2, 8), "Normal": generateLedPositions(4, 16), "Large": generateLedPositions(8, 32), "X Large": generateLedPositions(16, 64) },
-	"4:3 Landscape": { "Small": generateLedPositions(8, 6), "Normal": generateLedPositions(16, 12), "Large": generateLedPositions(32, 24), "X Large": generateLedPositions(64, 48) },
-	"4:3 Portrait": { "Small": generateLedPositions(6, 8), "Normal": generateLedPositions(12, 16), "Large": generateLedPositions(24, 32), "X Large": generateLedPositions(48, 64) },
-	"5:4 Landscape": { "Small": generateLedPositions(10, 8), "Normal": generateLedPositions(20, 16), "Large": generateLedPositions(40, 32), "X Large": generateLedPositions(80, 64) },
-	"5:4 Portrait": { "Small": generateLedPositions(8, 10), "Normal": generateLedPositions(16, 20), "Large": generateLedPositions(32, 40), "X Large": generateLedPositions(64, 80) },
-	"16:9 Landscape": { "Small": generateLedPositions(32, 18), "Normal": generateLedPositions(48, 27), "Large": generateLedPositions(64, 36), "X Large": generateLedPositions(128, 72) },
-	"16:9 Portrait": { "Small": generateLedPositions(18, 32), "Normal": generateLedPositions(27, 48), "Large": generateLedPositions(36, 64), "X Large": generateLedPositions(72, 128) },
-	"16:10 Landscape": { "Small": generateLedPositions(32, 20), "Normal": generateLedPositions(48, 30), "Large": generateLedPositions(64, 40), "X Large": generateLedPositions(128, 80) },
-	"16:10 Portrait": { "Small": generateLedPositions(29, 32), "Normal": generateLedPositions(30, 48), "Large": generateLedPositions(40, 64), "X Large": generateLedPositions(80, 128) },
-	"21:9 Landscape": { "Small": generateLedPositions(42, 18), "Normal": generateLedPositions(63, 27), "Large": generateLedPositions(84, 36), "X Large": generateLedPositions(168, 72) },
-	"21:9 Portrait": { "Small": generateLedPositions(18, 42), "Normal": generateLedPositions(27, 63), "Large": generateLedPositions(36, 84), "X Large": generateLedPositions(72, 168) },
-	"32:9 Landscape": { "Small": generateLedPositions(64, 18), "Normal": generateLedPositions(96, 27), "Large": generateLedPositions(128, 36), "X Large": generateLedPositions(256, 72) },
-	"32:9 Portrait": { "Small": generateLedPositions(18, 64), "Normal": generateLedPositions(27, 96), "Large": generateLedPositions(36, 128), "X Large": generateLedPositions(72, 256) }
-};
+// Positions and names are built lazily for the active layout only. Building
+// every aspect and tier up front allocated tens of thousands of arrays that
+// most sessions never use.
+const ledPositionsCache = new Map();
+const ledNamesCache = new Map();
+
+function ledPositionsFor(matrixSize, matrixTier) {
+	const size = vLedSizes[matrixSize] && vLedSizes[matrixSize][matrixTier];
+	if (!size) return null;
+	const key = matrixSize + "\0" + matrixTier;
+	let positions = ledPositionsCache.get(key);
+	if (!positions) {
+		positions = generateLedPositions(size[0], size[1]);
+		ledPositionsCache.set(key, positions);
+	}
+	return positions;
+}
+
+function ledNamesFor(matrixSize, matrixTier) {
+	const size = vLedSizes[matrixSize] && vLedSizes[matrixSize][matrixTier];
+	if (!size) return null;
+	const count = size[0] * size[1];
+	let names = ledNamesCache.get(count);
+	if (!names) {
+		names = generateLedNames(count);
+		ledNamesCache.set(count, names);
+	}
+	return names;
+}
 const vLedSizes = {
 	"4:1 Landscape": { "Small": [8, 2], "Normal": [16, 4], "Large": [32, 8], "X Large": [64, 16] },
 	"4:1 Portrait": { "Small": [2, 8], "Normal": [4, 16], "Large": [8, 32], "X Large": [16, 64] },
@@ -111,41 +124,36 @@ const vLedSizes = {
 	"32:9 Landscape": { "Small": [64, 18], "Normal": [96, 27], "Large": [128, 36], "X Large": [256, 72] },
 	"32:9 Portrait": { "Small": [18, 64], "Normal": [27, 96], "Large": [36, 128], "X Large": [72, 256] }
 };
-const _vLedNames = {
-	"4:1": { "Small": generateLedNames(16), "Normal": generateLedNames(64), "Large": generateLedNames(256), "X Large": generateLedNames(1024) },
-	"4:3": { "Small": generateLedNames(48), "Normal": generateLedNames(192), "Large": generateLedNames(768), "X Large": generateLedNames(3072) },
-	"5:4": { "Small": generateLedNames(80), "Normal": generateLedNames(320), "Large": generateLedNames(1280), "X Large": generateLedNames(5120) },
-	"16:9": { "Small": generateLedNames(576), "Normal": generateLedNames(1296), "Large": generateLedNames(2304), "X Large": generateLedNames(9216) },
-	"16:10": { "Small": generateLedNames(640), "Normal": generateLedNames(1440), "Large": generateLedNames(2560), "X Large": generateLedNames(10240) },
-	"21:9": { "Small": generateLedNames(756), "Normal": generateLedNames(1701), "Large": generateLedNames(3024), "X Large": generateLedNames(12096) },
-	"32:9": { "Small": generateLedNames(1152), "Normal": generateLedNames(2592), "Large": generateLedNames(4608), "X Large": generateLedNames(18432) },
-};
-const vLedNames = {
-	"4:1 Landscape": _vLedNames["4:1"],
-	"4:1 Portrait": _vLedNames["4:1"],
-	"4:3 Landscape": _vLedNames["4:3"],
-	"4:3 Portrait": _vLedNames["4:3"],
-	"5:4 Landscape": _vLedNames["5:4"],
-	"5:4 Portrait": _vLedNames["5:4"],
-	"16:9 Landscape": _vLedNames["16:9"],
-	"16:9 Portrait": _vLedNames["16:9"],
-	"16:10 Landscape": _vLedNames["16:10"],
-	"16:10 Portrait": _vLedNames["16:10"],
-	"21:9 Landscape": _vLedNames["21:9"],
-	"21:9 Portrait": _vLedNames["21:9"],
-	"32:9 Landscape": _vLedNames["32:9"],
-	"32:9 Portrait": _vLedNames["32:9"],
-};
-
 let __rgbjWallpaperGridPrimed = false;
 let __rgbjWallpaperLastMatrixKey = "";
 
 const RGBJ_WALLPAPER_DEFAULT_MATRIX = "16:9 Landscape";
 const RGBJ_WALLPAPER_DEFAULT_TIER = "Normal";
 
+function isLoopbackIp(ip) {
+	if (typeof ip !== "string") return false;
+	const value = ip.trim().toLowerCase();
+	return (
+		value === "127.0.0.1" ||
+		value === "::1" ||
+		value === "[::1]" ||
+		value === "localhost" ||
+		/^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(value)
+	);
+}
+
 function wallpaperTarget() {
-	if (typeof controller !== "undefined" && controller && controller.ip) {
-		return controller;
+	// The companion only ever listens on loopback (8133 main, 8134 second).
+	// A controller record pointing anywhere else would leak the cover image
+	// path from the settings packet and stream canvas colours off machine,
+	// so anything non loopback or off port falls back to the main endpoint.
+	if (typeof controller !== "undefined" && controller && isLoopbackIp(controller.ip)) {
+		const port = Number(controller.port) | 0;
+		if (port === 8133 || port === 8134) {
+			const name =
+				typeof controller.name === "string" && controller.name ? controller.name : "Live Wallpaper";
+			return { name, ip: controller.ip.trim(), port };
+		}
 	}
 	return { name: "Live Wallpaper", ip: "127.0.0.1", port: 8133 };
 }
@@ -154,17 +162,24 @@ function wallpaperSend(packet) {
 	if (typeof udp === "undefined" || !udp || typeof udp.send !== "function") {
 		return;
 	}
+	if (!Array.isArray(packet) || packet.length === 0) {
+		return;
+	}
 	const target = wallpaperTarget();
-	udp.send(target.ip, target.port, packet);
+	try {
+		udp.send(target.ip, target.port, packet);
+	} catch (_e) {
+		// A missing companion must not throw out of the render loop.
+	}
 }
 
 function rgbjWallpaperLayoutKeys() {
 	const ms =
-		typeof MatrixSize !== "undefined" && MatrixSize != null && vLedNames[MatrixSize]
+		typeof MatrixSize !== "undefined" && MatrixSize != null && vLedSizes[MatrixSize]
 			? MatrixSize
 			: RGBJ_WALLPAPER_DEFAULT_MATRIX;
 	const mt =
-		typeof MatrixTier !== "undefined" && MatrixTier != null && vLedNames[ms] && vLedNames[ms][MatrixTier]
+		typeof MatrixTier !== "undefined" && MatrixTier != null && vLedSizes[ms] && vLedSizes[ms][MatrixTier]
 			? MatrixTier
 			: RGBJ_WALLPAPER_DEFAULT_TIER;
 	return { ms, mt };
@@ -172,8 +187,8 @@ function rgbjWallpaperLayoutKeys() {
 
 function rgbjWallpaperLayoutBundle() {
 	const { ms, mt } = rgbjWallpaperLayoutKeys();
-	const names = vLedNames[ms] && vLedNames[ms][mt];
-	const positions = vLedPositions[ms] && vLedPositions[ms][mt];
+	const names = ledNamesFor(ms, mt);
+	const positions = ledPositionsFor(ms, mt);
 	const size = vLedSizes[ms] && vLedSizes[ms][mt];
 	if (!names || !positions || !size) {
 		return null;
@@ -191,6 +206,14 @@ function syncMatrixLayout() {
 	if (!bundle) {
 		return false;
 	}
+	if (
+		typeof device === "undefined" ||
+		!device ||
+		typeof device.setSize !== "function" ||
+		typeof device.setControllableLeds !== "function"
+	) {
+		return false;
+	}
 	device.setSize(bundle.size);
 	device.setControllableLeds(bundle.names, bundle.positions);
 	__rgbjWallpaperGridPrimed = false;
@@ -200,8 +223,11 @@ function syncMatrixLayout() {
 function syncMatrixLayoutIfNeeded() {
 	const key = rgbjWallpaperMatrixKey();
 	if (key === __rgbjWallpaperLastMatrixKey) return;
-	__rgbjWallpaperLastMatrixKey = key;
-	syncMatrixLayout();
+	// Only latch the key once the layout actually applied, so a failed sync
+	// (host device not ready yet) is retried on the next frame.
+	if (syncMatrixLayout()) {
+		__rgbjWallpaperLastMatrixKey = key;
+	}
 }
 
 export function onMatrixSizeChanged() {
@@ -250,7 +276,9 @@ export function onLedPaddingChanged() {
 
 export function onFPSChanged() {
 	const fps = Math.max(1, Math.min(240, Number(FPS) || 60));
-	device.setFrameRateTarget(fps);
+	if (typeof device !== "undefined" && device && typeof device.setFrameRateTarget === "function") {
+		device.setFrameRateTarget(fps);
+	}
 	updateSettings();
 }
 
@@ -292,14 +320,20 @@ export function deviceConfiguration() {
 }
 
 export function initialize() {
-	device.setName(wallpaperTarget().name);
-	if (typeof device.addFeature === "function") {
-		device.addFeature("udp");
+	if (typeof device !== "undefined" && device) {
+		if (typeof device.setName === "function") {
+			device.setName(wallpaperTarget().name);
+		}
+		if (typeof device.addFeature === "function") {
+			device.addFeature("udp");
+		}
 	}
 	__rgbjWallpaperLastMatrixKey = "";
 	syncMatrixLayout();
 	const fps = Math.max(1, Math.min(240, Number(FPS) || 60));
-	device.setFrameRateTarget(fps);
+	if (typeof device !== "undefined" && device && typeof device.setFrameRateTarget === "function") {
+		device.setFrameRateTarget(fps);
+	}
 	updateSettings();
 }
 
@@ -325,19 +359,27 @@ function rgbjWallpaperCoverStretchByte() {
 	return 2;
 }
 
+let __rgbjWallpaperLastInvalidWarnMs = 0;
+
 function updateSettings() {
-	const gridSize = vLedSizes[MatrixSize] && vLedSizes[MatrixSize][MatrixTier];
-	const matrixIdx = vMatrixSize[MatrixSize];
-	const tierIdx = vMatrixTier[MatrixTier];
+	const rawMatrixSize = typeof MatrixSize !== "undefined" ? MatrixSize : undefined;
+	const rawMatrixTier = typeof MatrixTier !== "undefined" ? MatrixTier : undefined;
+	const gridSize = vLedSizes[rawMatrixSize] && vLedSizes[rawMatrixSize][rawMatrixTier];
+	const matrixIdx = vMatrixSize[rawMatrixSize];
+	const tierIdx = vMatrixTier[rawMatrixTier];
 	if (!gridSize || matrixIdx === undefined || tierIdx === undefined) {
 		__rgbjWallpaperSettingsResyncOnRender = false;
-		try {
-			console.warn(
-				"[RGBJunkie][Wallpaper] invalid Aspect Ratio / Display Size:",
-				MatrixSize,
-				MatrixTier
-			);
-		} catch (_e) { /* ignore */ }
+		const now = Date.now();
+		if (now - __rgbjWallpaperLastInvalidWarnMs > 30000) {
+			__rgbjWallpaperLastInvalidWarnMs = now;
+			try {
+				console.warn(
+					"[RGBJunkie][Wallpaper] invalid Aspect Ratio / Display Size:",
+					rawMatrixSize,
+					rawMatrixTier
+				);
+			} catch (_e) { /* ignore */ }
+		}
 		return;
 	}
 	const bgcolor = hexToRgb(BackgroundColor);
@@ -350,7 +392,7 @@ function updateSettings() {
 		rgbjWallpaperLedShapeByte(), corner, padding, fps, rgbjWallpaperCoverStretchByte(), 0,
 		bgcolor[0], bgcolor[1], bgcolor[2], sdcolor[0], sdcolor[1], sdcolor[2]];
 
-	const coverImageBytes = stringToBytes(CoverImage).slice(0, 255);
+	const coverImageBytes = stringToBytes(typeof CoverImage !== "undefined" ? CoverImage : "", 255);
 	packet.push(coverImageBytes.length);
 	packet.push(...coverImageBytes);
 	packet.push(gridSize[0] & 255, gridSize[1] & 255);
@@ -380,7 +422,23 @@ export function resyncCompanionSettings() {
 }
 
 export function shutdown(suspend) {
-	grabColors(true);
+	void suspend;
+	try {
+		grabColors(true);
+	} finally {
+		// The companion may restart while the host is suspended. Clear the
+		// dedupe flags so the next render resends settings and grid state
+		// instead of assuming the companion still has them.
+		__rgbjWallpaperGridPrimed = false;
+		__rgbjWallpaperSettingsResyncOnRender = false;
+		__rgbjWallpaperLastSettingsKey = "";
+	}
+}
+
+function colourByte(value) {
+	const n = Number(value);
+	if (!Number.isFinite(n)) return 0;
+	return n < 0 ? 0 : n > 255 ? 255 : n | 0;
 }
 
 function grabColors(shutdown = false) {
@@ -389,54 +447,81 @@ function grabColors(shutdown = false) {
 		updateSettings();
 		__rgbjWallpaperGridPrimed = true;
 	}
-	const positions = vLedPositions[MatrixSize] && vLedPositions[MatrixSize][MatrixTier];
+	const bundle = rgbjWallpaperLayoutBundle();
+	const positions = bundle ? bundle.positions : null;
 	if (!Array.isArray(positions) || positions.length === 0) {
 		return;
 	}
-	const RGBData = [];
+	if (typeof device === "undefined" || !device || typeof device.color !== "function") {
+		if (!shutdown && LightingMode !== "Forced") {
+			return;
+		}
+	}
 	const LedCount = positions.length;
 	const NumPackets = Math.ceil(LedCount / MaxLedsInPacket);
+	// Parse a fixed colour once per frame. The old loop ran the hex parser
+	// for every LED, and built one full frame array only to splice and
+	// concat it into packets (quadratic shifting on the large tiers).
+	const fixedColor = shutdown
+		? hexToRgb(shutdownColor)
+		: LightingMode === "Forced"
+			? hexToRgb(forcedColor)
+			: null;
 
-	for (let iIdx = 0; iIdx < LedCount; iIdx++) {
-		const iPxX = positions[iIdx][0];
-		const iPxY = positions[iIdx][1];
-		let color;
-
-		if (shutdown) {
-			color = hexToRgb(shutdownColor);
-		} else if (LightingMode === "Forced") {
-			color = hexToRgb(forcedColor);
-		} else {
-			color = device.color(iPxX, iPxY);
-		}
-
-		const iLedIdx = (iIdx) * 3;
-		RGBData[iLedIdx] = color[0];
-		RGBData[iLedIdx + 1] = color[1];
-		RGBData[iLedIdx + 2] = color[2];
-	}
-
+	let ledIdx = 0;
 	for (let currPacket = 0; currPacket < NumPackets; currPacket++) {
-		const startIdx = currPacket * MaxLedsInPacket;
-		let packet = [ColorPacket, currPacket, NumPackets];
-		packet = packet.concat(RGBData.splice(0, MaxLedsInPacket * 3));
+		const ledsInPacket = Math.min(MaxLedsInPacket, LedCount - ledIdx);
+		// One fresh array per packet: the host may retain it past the send
+		// call, so packets are never pooled or reused across frames.
+		const packet = new Array(3 + ledsInPacket * 3);
+		packet[0] = ColorPacket;
+		packet[1] = currPacket;
+		packet[2] = NumPackets;
+		let out = 3;
+		for (let n = 0; n < ledsInPacket; n++, ledIdx++) {
+			const pos = positions[ledIdx];
+			const color = fixedColor || device.color(pos[0], pos[1]);
+			if (color && color.length >= 3) {
+				packet[out++] = colourByte(color[0]);
+				packet[out++] = colourByte(color[1]);
+				packet[out++] = colourByte(color[2]);
+			} else {
+				packet[out++] = 0;
+				packet[out++] = 0;
+				packet[out++] = 0;
+			}
+		}
 		wallpaperSend(packet);
-		void startIdx;
 	}
 }
 
-function stringToBytes(str) {
+function stringToBytes(str, maxBytes) {
 	const bytes = [];
-	const s = String(str || "");
-	for (let i = 0; i < s.length; i++) {
-		const code = s.charCodeAt(i);
+	const limit = typeof maxBytes === "number" && maxBytes >= 0 ? maxBytes : Infinity;
+	// Control characters have no place in a cover path or URL and can break
+	// line or log based handling on the receiving side, so drop them here.
+	const s = String(str || "").replace(/[\u0000-\u001f\u007f]/g, "");
+	for (const ch of s) {
+		const code = ch.codePointAt(0);
 		if (code < 0x80) {
+			if (bytes.length + 1 > limit) break;
 			bytes.push(code);
 		} else if (code < 0x800) {
+			if (bytes.length + 2 > limit) break;
 			bytes.push(0xc0 | (code >> 6));
 			bytes.push(0x80 | (code & 0x3f));
-		} else if (code < 0xd800 || code >= 0xe000) {
+		} else if (code < 0x10000) {
+			if (bytes.length + 3 > limit) break;
 			bytes.push(0xe0 | (code >> 12));
+			bytes.push(0x80 | ((code >> 6) & 0x3f));
+			bytes.push(0x80 | (code & 0x3f));
+		} else {
+			// Astral characters arrive as one code point here. The old loop
+			// dropped surrogate pairs outright and the byte cap could cut a
+			// multi byte sequence in half, corrupting the path.
+			if (bytes.length + 4 > limit) break;
+			bytes.push(0xf0 | (code >> 18));
+			bytes.push(0x80 | ((code >> 12) & 0x3f));
 			bytes.push(0x80 | ((code >> 6) & 0x3f));
 			bytes.push(0x80 | (code & 0x3f));
 		}
@@ -480,6 +565,9 @@ function generateLedNames(count) {
 export function DiscoveryService() {
 	this.IconUrl = "";
 	this.Initialize = () => {
+		if (typeof service === "undefined" || !service || typeof service.addController !== "function") {
+			return;
+		}
 		service.addController(new Wallpaper({
 			id: "Wallpaper",
 			port: 8133,
@@ -493,18 +581,23 @@ export function DiscoveryService() {
 			name: "Live Wallpaper (second screen)",
 		}));
 
-		const controllers = [service.getController("Wallpaper"), service.getController("Wallpaper2")];
+		const getController = typeof service.getController === "function" ? service.getController.bind(service) : () => null;
+		const controllers = [getController("Wallpaper"), getController("Wallpaper2")];
 		controllers.forEach(function (entry) {
 			if (!entry) return;
-			service.updateController(entry);
-			service.announceController(entry);
+			if (typeof service.updateController === "function") service.updateController(entry);
+			if (typeof service.announceController === "function") service.announceController(entry);
 		});
 
 		updateSettings();
 	};
 
 	this.Update = () => {
+		if (typeof service === "undefined" || !service || !Array.isArray(service.controllers)) {
+			return;
+		}
 		for (const cont of service.controllers) {
+			if (!cont || !cont.obj || typeof cont.obj.update !== "function") continue;
 			cont.obj.update();
 		}
 	};
@@ -524,8 +617,10 @@ class Wallpaper {
 		if (!this.initialized) {
 			this.initialized = true;
 
-			service.updateController(this);
-			service.announceController(this);
+			if (typeof service !== "undefined" && service) {
+				if (typeof service.updateController === "function") service.updateController(this);
+				if (typeof service.announceController === "function") service.announceController(this);
+			}
 		}
 	}
 }
